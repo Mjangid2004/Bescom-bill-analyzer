@@ -2,7 +2,7 @@
 
 A simple web app that **tracks your monthly electricity bills, shows charts, and predicts your future bills** using machine learning. Built for BESCOM (Bangalore) LT7 residential tariff.
 
-**Live App:** [https://your-app-name.streamlit.app](https://your-app-name.streamlit.app) *(update after deployment)*
+**Live App:** [https://bescom-bill-analyzer.streamlit.app](https://bescom-bill-analyzer.streamlit.app)
 
 ---
 
