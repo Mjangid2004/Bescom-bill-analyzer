@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, date
 from PIL import Image
+import io, base64
 
 from src.data_manager import load_history, save_entry, delete_entry, update_entry, COLUMNS
 try:
@@ -42,6 +43,10 @@ DARK_CSS = """
     .stTabs [data-baseweb="tab-list"] { background-color: #1B2D45; }
     .stTabs [data-baseweb="tab"] { color: #E0E0E0; }
     .stTabs [aria-selected="true"] { color: #00B4D8 !important; }
+    .scan-wrap { position: relative; display: inline-block; width: 100%; border-radius: 8px; overflow: hidden; }
+    .scan-wrap .scan-line { position: absolute; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, #00B4D8, #FFB703, transparent); box-shadow: 0 0 15px #00B4D8, 0 0 30px #00B4D8; animation: scan 2s ease-in-out infinite; z-index: 2; }
+    @keyframes scan { 0% { top: -2px; } 50% { top: calc(100% - 2px); } 100% { top: -2px; } }
+    .scan-wrap .scan-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(180deg, rgba(0,180,216,0.08) 0%, rgba(255,183,3,0.05) 50%, rgba(0,180,216,0.08) 100%); pointer-events: none; z-index: 1; border-radius: 8px; }
 </style>
 """
 st.markdown(DARK_CSS, unsafe_allow_html=True)
@@ -87,10 +92,42 @@ if pages[page] == "add":
     with col2:
         img_ready = st.session_state.get("uploaded_img") is not None
         if img_ready and st.button("🔍 Extract with OCR", type="primary", use_container_width=True):
-            with st.spinner("Running OCR... This may take a minute..."):
-                data = parse_uploaded_bill(st.session_state.uploaded_img)
+            img = st.session_state.uploaded_img
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            b64 = base64.b64encode(buf.getvalue()).decode()
+            scan_html = f"""
+            <div class="scan-wrap">
+                <img src="data:image/png;base64,{b64}" style="width:100%;border-radius:8px;" />
+                <div class="scan-line"></div>
+                <div class="scan-overlay"></div>
+            </div>
+            <p style="color:#00B4D8;text-align:center;margin-top:8px;font-size:14px;" class="status-pulse">⚡ Scanning bill...</p>
+            """
+            status_area = st.empty()
+            prog = st.progress(0)
+            import time as _time
+            status_area.markdown(scan_html, unsafe_allow_html=True)
+            prog.progress(8)
+            _time.sleep(0.3)
+            status_area.info("📄 Loading bill image...")
+            prog.progress(15)
+            _time.sleep(0.4)
+            status_area.info("🔍 Detecting text regions...")
+            prog.progress(30)
+            _time.sleep(0.4)
+            status_area.info("⚙️ Running OCR engine (this may take a minute)...")
+            prog.progress(50)
+            data = parse_uploaded_bill(img)
+            status_area.info("📊 Extracting bill fields...")
+            prog.progress(80)
+            _time.sleep(0.4)
+            status_area.info("✅ Calculating charges from formula...")
+            prog.progress(95)
+            _time.sleep(0.3)
             st.session_state.ocr = data
-            st.success("Extraction complete! Review below.")
+            prog.progress(100)
+            status_area.success("✅ Extraction complete! Review the fields below.")
             raw = data.pop("_raw_text", "")
             if raw:
                 with st.expander("Raw OCR Output"):
