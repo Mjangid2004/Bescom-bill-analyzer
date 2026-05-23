@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.DS_Store
+streamlit_log.txt
+streamlit_output.txt
+streamlit_error.txt
+test_*.py
