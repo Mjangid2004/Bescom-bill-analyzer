@@ -119,8 +119,14 @@ def parse_bill_data(text: str) -> dict:
     elif len(readings) == 1:
         result["present_reading"] = readings[0]
 
+    readings_vals = set(readings) | {2026.0, 2025.0, 2024.0, 2023.0}
     units = None
-    if "present_reading" in result and "previous_reading" in result:
+    for v in nums:
+        if 20 <= v <= 500 and v not in readings_vals:
+            units = v
+            result["units_consumed"] = units
+            break
+    if units is None and "present_reading" in result and "previous_reading" in result:
         diff = round(result["present_reading"] - result["previous_reading"], 1)
         if 20 <= diff <= 500:
             units = diff
@@ -133,12 +139,31 @@ def parse_bill_data(text: str) -> dict:
             result["power_factor"] = v
             break
 
-    md = None
-    for v in nums:
-        if 0.5 <= v <= 3.0 and v != pf:
-            md = round(v, 3)
+    md_raw = None
+    md_match = re.search(r"([LIl1])?(\d{2,3})\.?\s*(?:KW|OKW|MD|md|kw)", text)
+    if md_match:
+        prefix = md_match.group(1)
+        digits = md_match.group(2)
+        try:
+            if prefix and prefix in "LIl" and len(digits) == 2:
+                md_raw = float(f"1.{digits}")
+            else:
+                md_raw = float(digits)
+        except ValueError:
+            pass
+    if md_raw is not None:
+        if 0.5 <= md_raw <= 3.0:
+            md = round(md_raw, 3)
             result["recorded_md"] = md
-            break
+    if md is None:
+        for v in nums:
+            if 0.5 <= v <= 3.0 and v != pf:
+                md = round(v, 3)
+                result["recorded_md"] = md
+                break
+    if md is None:
+        md = 0.5
+        result["recorded_md"] = md
 
     net_payable_ocr = None
     for v in sorted(nums, reverse=True):

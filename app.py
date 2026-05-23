@@ -96,7 +96,7 @@ if pages[page] == "add":
                 with st.expander("Raw OCR Output"):
                     st.code(raw)
     st.divider()
-    st.subheader("Enter Bill Details")
+    st.markdown("#### ⭐ Fields marked with star are critical for prediction — double-check them")
     ocr = st.session_state.get("ocr", {})
     today = date.today()
     default_m = ocr.get("month", today.month if today.month != 1 else today.month - 1)
@@ -113,26 +113,26 @@ if pages[page] == "add":
             prev_r = st.number_input("Previous Reading", value=float(ocr.get("previous_reading", 0)), min_value=0.0)
             pres_r = st.number_input("Present Reading", value=float(ocr.get("present_reading", 0)), min_value=0.0)
         with c3:
-            units = st.number_input("Units Consumed", value=float(ocr.get("units_consumed", 0)), min_value=0.0)
-            md = st.number_input("Recorded MD (KW)", value=float(ocr.get("recorded_md", 0.5)), min_value=0.0, step=0.01)
+            units = st.number_input("⭐ Units Consumed", value=float(ocr.get("units_consumed", 0)), min_value=0.0)
+            md = st.number_input("⭐ Recorded MD (KW)", value=float(ocr.get("recorded_md", 0.5)), min_value=0.0, step=0.01)
             pf = st.number_input("Power Factor", value=float(ocr.get("power_factor", 0.97)), min_value=0.0, max_value=1.0, step=0.01)
-        st.subheader("Charges")
+        st.subheader("Other Charges (auto-calculated from formula)")
         c4, c5, c6 = st.columns(3)
         with c4:
-            fixed = st.number_input("Fixed Charges", value=float(ocr.get("fixed_charges", 200)), min_value=0.0)
-            energy = st.number_input("Energy Charges", value=float(ocr.get("energy_charges", 0)), min_value=0.0)
+            fixed = st.number_input("Fixed Charges", value=float(ocr.get("fixed_charges", 200)), min_value=0.0, disabled=True)
+            energy = st.number_input("Energy Charges", value=float(ocr.get("energy_charges", 0)), min_value=0.0, disabled=True)
         with c5:
-            fppca = st.number_input("FPPCA Charges", value=float(ocr.get("fppca_charges", 0)), min_value=0.0)
-            pg = st.number_input("P&G Surcharge", value=float(ocr.get("pg_surcharge", 0)), min_value=0.0)
+            fppca = st.number_input("FPPCA Charges", value=float(ocr.get("fppca_charges", 0)), min_value=0.0, disabled=True)
+            pg = st.number_input("P&G Surcharge", value=float(ocr.get("pg_surcharge", 0)), min_value=0.0, disabled=True)
         with c6:
-            tax = st.number_input("Tax (9%)", value=float(ocr.get("tax_amount", 0)), min_value=0.0)
-            penalty = st.number_input("MD Penalty", value=float(ocr.get("md_penalty", 0)), min_value=0.0)
+            tax = st.number_input("Tax (9%)", value=float(ocr.get("tax_amount", 0)), min_value=0.0, disabled=True)
+            penalty = st.number_input("MD Penalty", value=float(ocr.get("md_penalty", 0)), min_value=0.0, disabled=True)
         c7, c8 = st.columns(2)
         with c7:
-            true_up = st.number_input("True-Up Charges", value=float(ocr.get("true_up_charges", 0)), min_value=0.0)
+            true_up = st.number_input("True-Up Charges", value=float(ocr.get("true_up_charges", 0)), min_value=0.0, disabled=True)
         with c8:
-            arrears = st.number_input("Arrears", value=float(ocr.get("arrears", 0)), min_value=0.0)
-        net_payable = st.number_input("Net Payable (₹)", value=float(ocr.get("net_payable", 0)), min_value=0.0)
+            arrears = st.number_input("Arrears", value=float(ocr.get("arrears", 0)), min_value=0.0, disabled=True)
+        net_payable = st.number_input("⭐ Net Payable (₹)", value=float(ocr.get("net_payable", 0)), min_value=0.0)
         sub = st.form_submit_button("💾 Save Bill", type="primary", use_container_width=True)
         if sub:
             entry = {
