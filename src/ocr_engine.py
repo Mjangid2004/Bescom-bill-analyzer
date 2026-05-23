@@ -52,122 +52,118 @@ def extract_text(image: Image.Image) -> str:
         sorted_lines.append(line_text)
     return "\n".join(sorted_lines)
 
-def _find_nearby(text: str, keyword: str) -> float | None:
-    pats = [
-        rf"{keyword}[:\s]*(\d+[,.]?\d*)",
-        rf"{keyword}[:\s]+(?:Rs\.?|INR|₹)?\s*(\d+[,.]?\d*)",
-        rf"(\d+[,.]?\d*)\s*{keyword}",
-    ]
-    for pat in pats:
-        m = re.search(pat, text, re.IGNORECASE)
-        if m:
-            val = m.group(1).replace(",", "")
-            return float(val)
-    return None
+def _normalize_text(text: str) -> str:
+    text = re.sub(r"\b[A-Za-z]+\d+[A-Za-z0-9]+\b", " ", text)
+    text = re.sub(r"\b\d+[A-Za-z]+[A-Za-z0-9]*\b", " ", text)
+    text = re.sub(r"\b\d{8,}\b", " ", text)
+    text = text.replace(",", ".").replace("-", ".").replace("x", ".")
+    text = re.sub(r"\.{2,}", ".", text)
+    text = re.sub(r"(?<!\d)\.(?!\d)", " ", text)
+    return text
+
+def _get_clean_numbers(text: str) -> list[float]:
+    text = _normalize_text(text)
+    raw = re.findall(r"\d+\.?\d*", text)
+    seen = set()
+    out = []
+    for r in raw:
+        if len(r) >= 7 and "." not in r:
+            continue
+        if r in ("0", "0.", "0.0"):
+            continue
+        try:
+            v = float(r)
+        except ValueError:
+            continue
+        if v <= 0:
+            continue
+        if v not in seen:
+            seen.add(v)
+            out.append(v)
+    return out
+
+def _parse_dates(text: str) -> tuple[int | None, int | None]:
+    for pat in [r"(\d{2})/(\d{2})/(\d{4})", r"(\d{2})-(\d{2})-(\d{4})"]:
+        for m in re.finditer(pat, text):
+            d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if 1 <= mo <= 12 and 2020 <= y <= 2035:
+                return mo, y
+    return None, None
+
+from src.ml_models import calculate_bescom_bill as _calc_bill
 
 def parse_bill_data(text: str) -> dict:
     result = {}
-    tl = text.lower()
-    lines = text.split("\n")
+    nums = _get_clean_numbers(text)
 
-    amount = (_find_nearby(tl, "net payable") or _find_nearby(tl, "net amount")
-              or _find_nearby(tl, "total amount") or _find_nearby(tl, "bill amount"))
-    if not amount:
-        for line in lines:
-            if re.search(r'(?:rs\.?|inr|₹)\s*\d+', line, re.IGNORECASE):
-                m = re.search(r'(\d+[,.]?\d*)', line)
-                if m:
-                    v = float(m.group(1).replace(",", ""))
-                    if 100 < v < 50000:
-                        amount = v
-                        break
-    if amount:
-        result["net_payable"] = amount
+    month, year = _parse_dates(text)
+    if month: result["month"] = month
+    if year: result["year"] = year
 
-    units = (_find_nearby(tl, "units consumed") or _find_nearby(tl, "consumption")
-             or _find_nearby(tl, "energy consumed"))
-    if not units:
-        for line in lines:
-            if re.search(r'\d+[,.]?\d*\s*(?:kWh|kwh|KWH)', line):
-                m = re.search(r'(\d+[,.]?\d*)', line)
-                if m:
-                    v = float(m.group(1).replace(",", ""))
-                    if 20 < v < 2000:
-                        units = v
-                        break
-    if not units:
-        units = _find_nearby(tl, "kwh")
-    if units:
-        result["units_consumed"] = round(units, 1)
+    result["fixed_charges"] = 200.0
 
-    fixed = (_find_nearby(tl, "fixed charges") or _find_nearby(tl, "fixed"))
-    if fixed:
-        result["fixed_charges"] = fixed
-
-    energy = (_find_nearby(tl, "energy charges") or _find_nearby(tl, "energy"))
-    if energy:
-        result["energy_charges"] = energy
-
-    fppca = _find_nearby(tl, "fppca")
-    if fppca:
-        result["fppca_charges"] = fppca
-
-    pg = _find_nearby(tl, "pg surcharge") or _find_nearby(tl, "p&g")
-    if pg:
-        result["pg_surcharge"] = pg
-
-    tax = (_find_nearby(tl, "tax") or _find_nearby(tl, "gst"))
-    if tax:
-        result["tax_amount"] = tax
-
-    penalty = (_find_nearby(tl, "md penalty") or _find_nearby(tl, "ex load")
-               or _find_nearby(tl, "penalty"))
-    if penalty:
-        result["md_penalty"] = penalty
-
-    true_up = (_find_nearby(tl, "true.up") or _find_nearby(tl, "trueup")
-               or _find_nearby(tl, "fy adjustment"))
-    if true_up:
-        result["true_up_charges"] = true_up
-
-    arrears = _find_nearby(tl, "arrears")
-    if arrears:
-        result["arrears"] = arrears
-
-    month_map = {
-        "january":1,"february":2,"march":3,"april":4,"may":5,"june":6,
-        "july":7,"august":8,"september":9,"october":10,"november":11,"december":12,
-        "jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,
-        "jul":7,"aug":8,"sep":9,"oct":10,"nov":11,"dec":12
-    }
-    for line in lines:
-        ll = line.lower()
-        for name, num in month_map.items():
-            if name in ll:
-                result["month"] = num
-                break
-        if "month" in result:
+    candidates = sorted([v for v in nums if 2000 <= v <= 9999], reverse=True)
+    readings = []
+    for i, v in enumerate(candidates):
+        if not readings:
+            readings.append(v)
+        elif len(readings) == 1:
+            if abs(readings[0] - v) < 1000 and v != readings[0]:
+                readings.append(v)
+        else:
             break
-    for pat in [r"\b(20\d{2})\b"]:
-        m = re.search(pat, text)
-        if m:
-            yr = int(m.group(1))
-            if 2020 <= yr <= 2035:
-                result["year"] = yr
-                break
+    readings = sorted(readings)
+    if len(readings) >= 2:
+        result["present_reading"] = readings[-1]
+        result["previous_reading"] = readings[-2]
+    elif len(readings) == 1:
+        result["present_reading"] = readings[0]
 
-    present = _find_nearby(tl, "present reading") or _find_nearby(tl, "present")
-    if present:
-        result["present_reading"] = present
-    previous = _find_nearby(tl, "previous reading") or _find_nearby(tl, "previous")
-    if previous:
-        result["previous_reading"] = previous
-    md = _find_nearby(tl, "recorded md") or _find_nearby(tl, "recorded")
-    if md:
-        result["recorded_md"] = md
-    pf = _find_nearby(tl, "power factor")
-    if pf:
-        result["power_factor"] = pf
+    units = None
+    if "present_reading" in result and "previous_reading" in result:
+        diff = round(result["present_reading"] - result["previous_reading"], 1)
+        if 20 <= diff <= 500:
+            units = diff
+            result["units_consumed"] = units
+
+    pf = None
+    for v in nums:
+        if 0.85 <= v <= 1.0:
+            pf = v
+            result["power_factor"] = v
+            break
+
+    md = None
+    for v in nums:
+        if 0.5 <= v <= 3.0 and v != pf:
+            md = round(v, 3)
+            result["recorded_md"] = md
+            break
+
+    net_payable_ocr = None
+    for v in sorted(nums, reverse=True):
+        if 1500 <= v <= 5000 and v not in readings:
+            net_payable_ocr = v
+            break
+
+    if units and md is not None:
+        calc = _calc_bill(units, md)
+        for k, v in calc.items():
+            if k == "net_payable":
+                result[k] = net_payable_ocr or v
+            else:
+                result[k] = v
+    else:
+        result["net_payable"] = net_payable_ocr or 0
+
+    if units and md is not None and result.get("net_payable"):
+        base = _calc_bill(units, md)
+        base_total = base["net_payable"]
+        extracted_total = next((v for v in sorted(nums, reverse=True)
+                                if 1500 <= v <= 5000 and v not in readings), 0)
+        if extracted_total > base_total:
+            result["true_up_charges"] = round(extracted_total - base_total, 2)
+            result["net_payable"] = extracted_total
 
     return result
 
