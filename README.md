@@ -97,18 +97,6 @@ Open **http://localhost:8501** in your browser.
 
 ---
 
-## Deploy to Streamlit Cloud (Free)
-
-1. Push this project to a **GitHub repository**
-2. Go to **https://share.streamlit.io**
-3. Sign in with GitHub → **New app** → select your repo
-4. Set main file to `app.py` → click **Deploy**
-5. Your app is live at `https://your-username-your-repo.streamlit.app`
-
-> ⚠️ **Note:** Data is stored in a local CSV file. On Streamlit Cloud, it resets when the app restarts. Export your data from the History page for backup.
-
----
-
 ## Tech Stack
 
 | Tool | Purpose |
