@@ -78,12 +78,17 @@ if pages[page] == "add":
     with col1:
         uploaded = st.file_uploader("Upload bill image (optional)", type=["jpg", "jpeg", "png"])
         if uploaded:
-            image = Image.open(uploaded)
-            st.image(image, caption="Uploaded Bill", use_container_width=True)
+            try:
+                img = Image.open(uploaded)
+                st.session_state.uploaded_img = img
+                st.image(img, caption="Uploaded Bill", use_container_width=True)
+            except Exception as e:
+                st.error(f"Could not open image: {e}")
     with col2:
-        if uploaded and st.button("🔍 Extract with OCR", type="primary", use_container_width=True):
-            with st.spinner("Running OCR..."):
-                data = parse_uploaded_bill(image)
+        img_ready = st.session_state.get("uploaded_img") is not None
+        if img_ready and st.button("🔍 Extract with OCR", type="primary", use_container_width=True):
+            with st.spinner("Running OCR... This may take a minute..."):
+                data = parse_uploaded_bill(st.session_state.uploaded_img)
             st.session_state.ocr = data
             st.success("Extraction complete! Review below.")
             raw = data.pop("_raw_text", "")
